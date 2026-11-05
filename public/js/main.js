@@ -71,6 +71,7 @@ if (localStorage.getItem('mode')) {
 	setMode(localStorage.getItem('mode'));
 } else {
 	setMode('gdrive');
+	localStorage.setItem('mode', 'gdrive');
 }
 
 function setMode(mode) {

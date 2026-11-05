@@ -19,7 +19,7 @@
         --success: #70b875;
         --error: #c26b5d;
         --shadow-soft: 0 15px 40px rgba(20, 10, 30, 0.45);
-        --gradient-bg: linear-gradient(45deg, #e94584, #24aadb, #ffdc18, #27dbb1);
+        --gradient-bg: linear-gradient(45deg, #e8367a, #1ba9dc, #ffdc18, #27dbb1);
         --gradient-bg-pc: linear-gradient(25deg, #e94584, #24aadb, #ffdc18, #27dbb1);
         --font-sans: "Inter", sans-serif;
       }
@@ -1371,11 +1371,13 @@
             padding: 0.9em 1em;
           }
 
-
+          h1{
+                 margin-top:0.5em;
+          }
 
           h1 .title {
             font-size: 1.7rem;
-
+       
           }
 
           .sub-title {
@@ -1396,15 +1398,15 @@
             border-radius: 0;
             padding-top: 2em;
             min-height: 88dvh !important;
-
+       
           }
 
           .main {
-            background-color: rgba(0, 0, 0, 0.55);
+            background-color: rgba(0, 0, 0, 0.4);
           }
 
           .options {
-            background-color: rgba(0, 0, 0, 0.4);
+            background-color: rgba(0, 0, 0, 0.25);
           }
 
           .sidebar {
@@ -1436,8 +1438,8 @@
 
           .options .options-menu {
             width: 100% !important;
-            gap: 0.5em !important;
-            margin-top: 2.7em !important;
+            gap: 0.7em !important;
+            margin-top: 3em !important;
           }
 
           .options .storageinfo {

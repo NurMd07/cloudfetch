@@ -768,19 +768,92 @@ fi
 
 echo -e "\nRunning FileBot into Staging...\n" >&2
 
+# # 10. FileBot Phase (Organizes inside staging/filebot_<RUN_ID>)
+# STAGE_DIR="$STAGING_BASE/filebot_${RUN_ID}"
+# mkdir -p "$STAGE_DIR"
+
+# FB_CODE=0
+# if [[ "$MEDIA_TYPE" == "tv" ]]; then
+#     run_interruptible filebot -rename -r "$FILEBOT_INPUT" \
+#         --action "$FILEBOT_ACTION" \
+#         --db TVmaze \
+#         --q "$MEDIA_NAME" \
+#         -non-strict \
+#         --output "$STAGE_DIR" \
+#         --format "$MEDIA_NAME/Season {s.pad(2)}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
+    
+#     if [[ $FB_CODE -ne 0 ]]; then
+#         json_error "FileBot TV renaming process failed (exit code $FB_CODE)."
+#     fi
+# elif [[ "$MEDIA_TYPE" == "anime" ]]; then
+#     run_interruptible filebot -rename -r "$FILEBOT_INPUT" \
+#         --action "$FILEBOT_ACTION" \
+#         --db TVmaze \
+#         --q "$MEDIA_NAME" \
+#         -non-strict \
+#         --output "$STAGE_DIR" \
+#         --format "$MEDIA_NAME/{any{'Season '+s.pad(2)}{'Season 01'}}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
+    
+#     if [[ $FB_CODE -ne 0 ]]; then
+#         echo "TVmaze lookup failed for anime, falling back to AniDB..." >&2
+#         FB_CODE=0
+#         run_interruptible filebot -rename -r "$FILEBOT_INPUT" \
+#             --action "$FILEBOT_ACTION" \
+#             --db AniDB \
+#             --q "$MEDIA_NAME" \
+#             -non-strict \
+#             --output "$STAGE_DIR" \
+#             --format "$MEDIA_NAME/{any{'Season '+s.pad(2)}{'Season 01'}}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
+        
+#         if [[ $FB_CODE -ne 0 ]]; then
+#             json_error "FileBot Anime renaming process failed on both TVmaze and AniDB (exit code $FB_CODE)."
+#         fi
+#     fi
+# else
+#     run_interruptible filebot -rename -r "$FILEBOT_INPUT" \
+#         --action "$FILEBOT_ACTION" \
+#         --db TheMovieDB \
+#         --q "$MEDIA_NAME" \
+#         -non-strict \
+#         --output "$STAGE_DIR" \
+#         --format "{n} ({y})" >&2 || FB_CODE=$?
+    
+#     if [[ $FB_CODE -ne 0 ]]; then
+#         json_error "FileBot Movie renaming process failed (exit code $FB_CODE)."
+#     fi
+# fi
+
 # 10. FileBot Phase (Organizes inside staging/filebot_<RUN_ID>)
 STAGE_DIR="$STAGING_BASE/filebot_${RUN_ID}"
 mkdir -p "$STAGE_DIR"
+
+# Auto-detect season number from MEDIA_NAME or downloaded folder/file name
+DETECTED_SEASON=""
+COMBINED_HINT="$MEDIA_NAME $(basename "$WORKING_SOURCE") $(find "$FILEBOT_INPUT" -maxdepth 2 -type d -printf "%f " 2>/dev/null || true)"
+if [[ "$COMBINED_HINT" =~ [Ss](eason)?[[:space:]_.-]*0*([1-9][0-9]*)([^0-9]|$) ]]; then
+    DETECTED_SEASON="${BASH_REMATCH[2]}"
+fi
+
+FB_FILTER_ARGS=()
+if [[ -n "$DETECTED_SEASON" ]]; then
+    echo "Detected Season $DETECTED_SEASON from folder/title hint. Locking FileBot filter to Season $DETECTED_SEASON..." >&2
+    FB_FILTER_ARGS=(--filter "s == $DETECTED_SEASON")
+fi
+
+# Strip season suffix from the lookup query so TVmaze/AniDB searches the clean show title
+CLEAN_QUERY=$(echo "$MEDIA_NAME" | sed -E 's/[[:space:]]+[Ss](eason)?[[:space:]]*0*[0-9]+.*$//I')
+CLEAN_QUERY="${CLEAN_QUERY:-$MEDIA_NAME}"
 
 FB_CODE=0
 if [[ "$MEDIA_TYPE" == "tv" ]]; then
     run_interruptible filebot -rename -r "$FILEBOT_INPUT" \
         --action "$FILEBOT_ACTION" \
         --db TVmaze \
-        --q "$MEDIA_NAME" \
+        --q "$CLEAN_QUERY" \
+        "${FB_FILTER_ARGS[@]}" \
         -non-strict \
         --output "$STAGE_DIR" \
-        --format "$MEDIA_NAME/Season {s.pad(2)}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
+        --format "$CLEAN_QUERY/Season {s.pad(2)}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
     
     if [[ $FB_CODE -ne 0 ]]; then
         json_error "FileBot TV renaming process failed (exit code $FB_CODE)."
@@ -789,10 +862,11 @@ elif [[ "$MEDIA_TYPE" == "anime" ]]; then
     run_interruptible filebot -rename -r "$FILEBOT_INPUT" \
         --action "$FILEBOT_ACTION" \
         --db TVmaze \
-        --q "$MEDIA_NAME" \
+        --q "$CLEAN_QUERY" \
+        "${FB_FILTER_ARGS[@]}" \
         -non-strict \
         --output "$STAGE_DIR" \
-        --format "$MEDIA_NAME/{any{'Season '+s.pad(2)}{'Season 01'}}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
+        --format "$CLEAN_QUERY/{any{'Season '+s.pad(2)}{'Season 01'}}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
     
     if [[ $FB_CODE -ne 0 ]]; then
         echo "TVmaze lookup failed for anime, falling back to AniDB..." >&2
@@ -800,10 +874,11 @@ elif [[ "$MEDIA_TYPE" == "anime" ]]; then
         run_interruptible filebot -rename -r "$FILEBOT_INPUT" \
             --action "$FILEBOT_ACTION" \
             --db AniDB \
-            --q "$MEDIA_NAME" \
+            --q "$CLEAN_QUERY" \
+            "${FB_FILTER_ARGS[@]}" \
             -non-strict \
             --output "$STAGE_DIR" \
-            --format "$MEDIA_NAME/{any{'Season '+s.pad(2)}{'Season 01'}}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
+            --format "$CLEAN_QUERY/{any{'Season '+s.pad(2)}{'Season 01'}}/{n} - S{s.pad(2)}E{e.pad(2)}" >&2 || FB_CODE=$?
         
         if [[ $FB_CODE -ne 0 ]]; then
             json_error "FileBot Anime renaming process failed on both TVmaze and AniDB (exit code $FB_CODE)."
@@ -822,6 +897,7 @@ else
         json_error "FileBot Movie renaming process failed (exit code $FB_CODE)."
     fi
 fi
+
 
 # Helper function to move staged files/seasons into target directory without failing if Season folders already exist
 move_staged_tree() {

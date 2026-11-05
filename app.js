@@ -8,7 +8,7 @@ import fs from "fs";
 import chokidar from "chokidar";
 import si from "systeminformation";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 import session from "express-session";
 import sessionFileStore from "session-file-store";
@@ -18,19 +18,23 @@ const FileStore = sessionFileStore(session);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
-const port = Number(process.env.PORT || 8000);
+const port = Number(normalizeText(process.env.PORT) || 8000);
 const VALID_DOWNLOAD_TYPES = new Set(["gdrive", "siteDL", "magnet"]);
 const LOG_FILE = path.resolve(__dirname, "downloader.log");
 const DB_FILE = path.resolve(__dirname, "db.json");
 
-const normalizeText = (value) => (typeof value === "string" ? value.trim() : "");
-const getOutputDir = () => path.resolve(__dirname, process.env.OUTPUT || "output");
+function normalizeText(value) {
+	return typeof value === "string" ? value.trim() : "";
+}
+
+const getOutputDir = () => path.resolve(__dirname, normalizeText(process.env.OUTPUT) || "output");
 const getMediaPath = (folderName) => {
-	const baseDir = process.env.MEDIA_DIR ? path.resolve(process.env.MEDIA_DIR) : "/media";
+	const mediaDirEnv = normalizeText(process.env.MEDIA_DIR);
+	const baseDir = mediaDirEnv ? path.resolve(mediaDirEnv) : "/media";
 	const dirNameMap = {
-		movie: process.env.MOVIES_DIR_NAME || "Movies",
-		tv: process.env.SHOWS_DIR_NAME || "Shows",
-		anime: process.env.ANIME_DIR_NAME || "Animes"
+		movie: normalizeText(process.env.MOVIES_DIR_NAME) || "Movies",
+		tv: normalizeText(process.env.SHOWS_DIR_NAME) || "Shows",
+		anime: normalizeText(process.env.ANIME_DIR_NAME) || "Animes"
 	};
 
 	return path.join(baseDir, dirNameMap[folderName] || folderName);
@@ -40,6 +44,7 @@ const db = await JSONFilePreset(DB_FILE, []);
 await db.read();
 await db.write();
 
+app.set("trust proxy", 1);
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.static(path.join(__dirname, "public")));
@@ -49,14 +54,14 @@ app.use(express.json());
 app.use(session({
 	store: new FileStore({
 		path: "./sessions",
-		ttl: 60 * 60 * 24 * 30 
+		ttl: 60 * 60 * 24 * 30
 	}),
-	secret: process.env.SESSION_SECRET,
+	secret: normalizeText(process.env.SESSION_SECRET) || "default_secret",
 	resave: false,
 	saveUninitialized: false,
 	cookie: {
 		httpOnly: true,
-		secure: process.env.NODE_ENV === "production",
+		secure: normalizeText(process.env.NODE_ENV) === "production",
 		sameSite: "lax",
 		maxAge: 24 * 60 * 60 * 30 * 1000
 	}
@@ -111,41 +116,29 @@ function validateDownloadPayload(type, url, name) {
 }
 
 function buildDownloadArgs({ id, type, category, name, url }) {
+	const modeFlag = type === "gdrive" ? "-g" : type === "siteDL" ? "-s" : "-m";
+	const cookiesEnabled = normalizeText(process.env.COOKIES) || "false";
+	const browserName = normalizeText(process.env.BROWSER);
+	const outputDir = getOutputDir();
+
 	const args = [
+		modeFlag,
 		"-i", String(id),
-		"-t", category || "tv",
-		"-n", name,
-		"-l", url,
-		"-c", process.env.COOKIES || "false"
+		"-t", normalizeText(category) || "tv",
+		"-n", normalizeText(name),
+		"-l", normalizeText(url),
+		"-c", cookiesEnabled
 	];
 
-	const modeFlag = type === "gdrive" ? "-g" : type === "siteDL" ? "-s" : "-m";
-	args.push(modeFlag);
-
-	if (process.env.BROWSER) {
-		args.push("-b", process.env.BROWSER);
+	if (browserName) {
+		args.push("-b", browserName);
 	}
 
-	const outputDir = getOutputDir();
 	if (outputDir) {
 		args.push("-o", outputDir);
 	}
 
 	return args;
-}
-
-async function updateDownloadEntryStatus(id, status, details = {}) {
-	await db.read();
-	const entryIndex = db.data.findIndex((entry) => Number(entry.id) === Number(id));
-	if (entryIndex === -1) return;
-
-	db.data[entryIndex] = {
-		...db.data[entryIndex],
-		status,
-		...details
-	};
-
-	await db.write();
 }
 
 app.get("/login", async (req, res) => {
@@ -155,45 +148,45 @@ app.get("/login", async (req, res) => {
 app.post("/login", async (req, res) => {
 	const username = normalizeText(req.body.username);
 	const password = normalizeText(req.body.password);
+	const envUser = normalizeText(process.env.USERNAME);
+	const envPass = normalizeText(process.env.PASSWORD);
 
-	if (!process.env.USERNAME || !process.env.PASSWORD) {
+	if (!envUser || !envPass) {
 		return res.status(401).render("login", {
 			error: '<span class="error">Username</span> or <span class="error">Password</span> is missing in the .env file!'
 		});
 	}
 
-	if (username !== process.env.USERNAME || password !== process.env.PASSWORD) {
+	if (username !== envUser || password !== envPass) {
 		return res.status(401).render("login", {
 			error: 'Your <span class="error">Username</span> or <span class="error">Password</span> is Invalid!'
 		});
 	}
 	req.session.authenticated = true;
 
-	req.session.save(err => {
+	req.session.save((err) => {
 		if (err) return res.sendStatus(500);
 		res.redirect("/");
 	});
 });
 
 app.post("/logout", (req, res) => {
-    req.session.destroy(() => {
-        res.clearCookie("connect.sid");
-        res.redirect("/login");
-    });
+	req.session.destroy(() => {
+		res.clearCookie("connect.sid");
+		res.redirect("/login");
+	});
 });
 
 function requireAuth(req, res, next) {
-    if (req.session?.authenticated) {
-        return next();
-    }
+	if (req.session?.authenticated) {
+		return next();
+	}
 
-    return res.redirect("/login");
+	return res.redirect("/login");
 }
-
 
 // Protect everything below
 app.use(requireAuth);
-
 
 app.get("/", (req, res) => {
 	res.render("index");
@@ -243,10 +236,14 @@ app.post("/download/:type", async (req, res) => {
 		});
 		await db.write();
 
-		const childProcess = spawn(
-			path.join(__dirname, "src", "tvseries_downloader.sh"),
-			buildDownloadArgs({ id: nextId, type, category, name, url })
-		);
+		const scriptPath = path.join(__dirname, "src", "tvseries_downloader.sh");
+		const downloadArgs = buildDownloadArgs({ id: nextId, type, category, name, url });
+
+		const childProcess = spawn(scriptPath, downloadArgs);
+
+		childProcess.on("error", (err) => {
+			console.error("Failed to start downloader script:", err);
+		});
 
 		let jsonOutput = "";
 
@@ -266,7 +263,9 @@ app.post("/download/:type", async (req, res) => {
 		childProcess.on("close", async () => {
 			let result = {};
 			try {
-				result = jsonOutput ? JSON.parse(jsonOutput) : {};
+				const lines = jsonOutput.trim().split("\n").filter(Boolean);
+				const lastJsonLine = lines[lines.length - 1] || "";
+				result = lastJsonLine ? JSON.parse(lastJsonLine) : {};
 			} catch (error) {
 				console.error("Failed to parse downloader output:", jsonOutput, error);
 				return;
@@ -328,17 +327,21 @@ app.post("/deleteOne", async (req, res) => {
 
 app.get("/clearData", async (req, res) => {
 	try {
-		fs.rmSync(getOutputDir(), { recursive: true, force: true });
 		await db.read();
 		try {
 			db.data.forEach((entry) => {
 				if (entry.status === "pending") {
-					spawn(path.join(__dirname, "src", "tvseries_downloader.sh"), ["-k", String(entry.id)]);
+					const killProc = spawn(path.join(__dirname, "src", "tvseries_downloader.sh"), [
+						"-k", String(entry.id),
+						"-o", getOutputDir()
+					]);
+					killProc.on("error", (err) => console.error("Kill process error:", err));
 				}
 			});
 		} catch (err) {
 			console.error("Error killing the download process:", err);
 		}
+		fs.rmSync(getOutputDir(), { recursive: true, force: true });
 		db.data = [];
 		await db.write();
 	} catch (err) {
@@ -353,20 +356,20 @@ app.get("/moveData", async (req, res) => {
 		const scriptPath = path.join(__dirname, "src", "move_media.sh");
 		const moveArgs = [];
 
-		if (process.env.OUTPUT) {
-			moveArgs.push("-o", process.env.OUTPUT);
+		if (normalizeText(process.env.OUTPUT)) {
+			moveArgs.push("-o", normalizeText(process.env.OUTPUT));
 		}
-		if (process.env.MEDIA_DIR) {
-			moveArgs.push("-m", process.env.MEDIA_DIR);
+		if (normalizeText(process.env.MEDIA_DIR)) {
+			moveArgs.push("-m", normalizeText(process.env.MEDIA_DIR));
 		}
-		if (process.env.MOVIES_DIR_NAME) {
-			moveArgs.push("--movies-dir", process.env.MOVIES_DIR_NAME);
+		if (normalizeText(process.env.MOVIES_DIR_NAME)) {
+			moveArgs.push("--movies-dir", normalizeText(process.env.MOVIES_DIR_NAME));
 		}
-		if (process.env.SHOWS_DIR_NAME) {
-			moveArgs.push("--shows-dir", process.env.SHOWS_DIR_NAME);
+		if (normalizeText(process.env.SHOWS_DIR_NAME)) {
+			moveArgs.push("--shows-dir", normalizeText(process.env.SHOWS_DIR_NAME));
 		}
-		if (process.env.ANIME_DIR_NAME) {
-			moveArgs.push("--anime-dir", process.env.ANIME_DIR_NAME);
+		if (normalizeText(process.env.ANIME_DIR_NAME)) {
+			moveArgs.push("--anime-dir", normalizeText(process.env.ANIME_DIR_NAME));
 		}
 
 		const moveProcess = spawn(scriptPath, moveArgs, {
@@ -386,8 +389,8 @@ app.get("/moveData", async (req, res) => {
 	}
 });
 
-const MAX_LOG_SIZE = 64 * 1024; // 128 KB max before auto-trimming
-const KEEP_LOG_SIZE = 32 * 1024; // Keep the newest 64 KB after trimming
+const MAX_LOG_SIZE = 64 * 1024;
+const KEEP_LOG_SIZE = 32 * 1024;
 let isRotatingLog = false;
 
 function trimLogFileIfNeeded() {
@@ -449,12 +452,10 @@ app.get("/stream-logs", (req, res) => {
 			fs.writeFileSync(LOG_FILE, "", "utf8");
 		}
 
-		// 1. Trim immediately if the log file is already over 128 KB when opening the page
 		trimLogFileIfNeeded();
 
 		let fileSize = fs.statSync(LOG_FILE).size;
 
-		// Helper to read only newly appended bytes during live chokidar updates
 		const readNewBytes = (filePath, start, end, onComplete) => {
 			if (end <= start || res.writableEnded) {
 				if (onComplete) onComplete();
@@ -481,7 +482,6 @@ app.get("/stream-logs", (req, res) => {
 			});
 		};
 
-		// 2. Delayed Initial History Load (Gentle batching: 10 lines every 15ms)
 		const INITIAL_DELAY_MS = 0;
 		initialLoadTimer = setTimeout(() => {
 			try {
@@ -489,12 +489,11 @@ app.get("/stream-logs", (req, res) => {
 					const content = fs.readFileSync(LOG_FILE, "utf8");
 					fileSize = Buffer.byteLength(content, "utf8");
 
-					const lines = content.split("\n").map(l => l.trim()).filter(Boolean);
-					// Keep only the last 150 lines on initial load so it opens instantly
+					const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
 					const recentLines = lines.slice(-150);
 
 					let index = 0;
-					const batchSize = 10; // Push 10 lines at a time
+					const batchSize = 10;
 
 					const sendBatch = () => {
 						if (res.writableEnded || index >= recentLines.length) return;
@@ -503,7 +502,7 @@ app.get("/stream-logs", (req, res) => {
 						batch.forEach(sendLog);
 						index += batchSize;
 
-						setTimeout(sendBatch, 15); // 15ms pause between batches = perfectly smooth
+						setTimeout(sendBatch, 15);
 					};
 
 					sendBatch();
@@ -513,7 +512,6 @@ app.get("/stream-logs", (req, res) => {
 			}
 		}, INITIAL_DELAY_MS);
 
-		// 3. Watch for live changes (Instant delivery + auto-trim if > 128 KB)
 		watcher = chokidar.watch(LOG_FILE, {
 			persistent: true,
 			usePolling: true,
@@ -529,14 +527,12 @@ app.get("/stream-logs", (req, res) => {
 					const previousSize = fileSize;
 					fileSize = stats.size;
 
-					// Stream live updates instantly, then trim if file crossed 128 KB
 					readNewBytes(filePath, previousSize, stats.size, () => {
 						if (stats.size > MAX_LOG_SIZE && trimLogFileIfNeeded()) {
 							fileSize = fs.statSync(filePath).size;
 						}
 					});
 				} else if (stats.size < fileSize) {
-					// File was cleared or auto-rotated
 					fileSize = stats.size;
 					if (stats.size === 0) {
 						sendLog("--- [SYSTEM] Logs cleared ---");
@@ -570,7 +566,7 @@ app.get("/stream-logs", (req, res) => {
 		console.error("Error setting up /stream-logs:", err);
 		if (initialLoadTimer) clearTimeout(initialLoadTimer);
 		if (heartbeat) clearInterval(heartbeat);
-		if (watcher) watcher.close().catch(() => { });
+		if (watcher) watcher.close().catch(() => {});
 		if (!res.headersSent) {
 			res.status(500).json({ error: "Failed to stream logs" });
 		}
@@ -579,13 +575,12 @@ app.get("/stream-logs", (req, res) => {
 
 app.get("/clearLog", async (req, res) => {
 	try {
-		fs.writeFileSync("./downloader.log", "");
+		fs.writeFileSync(LOG_FILE, "");
 		res.json({ message: "Log cleared successfully" });
 	} catch (err) {
 		console.log(err);
 		res.status(500).json({ error: "Failed to clear Logs" });
 	}
-
 });
 
 async function deleteFileOrDirectory(filePath, isDirectory = false) {
@@ -601,19 +596,22 @@ async function deleteFileOrDirectory(filePath, isDirectory = false) {
 			await fs.promises.unlink(filePath);
 		}
 	} catch (err) {
-		if (err.code === 'ENOENT') return;
+		if (err.code === "ENOENT") return;
 		throw err;
 	}
 }
 
 app.get("/removeRecent", async (req, res) => {
 	await db.read();
-	const recentData = db.data.sort((a, b) => b.id - a.id)[0]; // Keep all but the most recent entry
+	const recentData = [...db.data].sort((a, b) => Number(b.id) - Number(a.id))[0];
 
 	if (recentData) {
-
 		try {
-			spawn(`${__dirname}/src/tvseries_downloader.sh`, ["-k", String(recentData.id)]);
+			const killProc = spawn(path.join(__dirname, "src", "tvseries_downloader.sh"), [
+				"-k", String(recentData.id),
+				"-o", getOutputDir()
+			]);
+			killProc.on("error", (err) => console.error("Kill process error:", err));
 		} catch (err) {
 			console.error("Error killing the download process:", err);
 		}
@@ -626,8 +624,9 @@ app.get("/removeRecent", async (req, res) => {
 						await deleteFileOrDirectory(path.join(getMediaPath("movie"), path.basename(recentData.output_path)), false);
 					}
 					db.data = db.data.filter((entry) => entry.id !== recentData.id);
-				} catch (err) { console.error("Error deleting movie file:", err); }
-
+				} catch (err) {
+					console.error("Error deleting movie file:", err);
+				}
 				break;
 			case "tv":
 				try {
@@ -659,7 +658,6 @@ app.get("/removeRecent", async (req, res) => {
 	res.json({ message: "Removed the most recent entry from the database" });
 });
 
-
 app.get("/getStorageInfo", async (req, res) => {
 	try {
 		const storageInfo = await getStorageInfo();
@@ -670,14 +668,14 @@ app.get("/getStorageInfo", async (req, res) => {
 	}
 });
 
-app.get('/listDir', async (req, res) => {
+app.get("/listDir", async (req, res) => {
 	try {
-		const output = fs.createWriteStream(LOG_FILE, { flags: 'a' });
-		const root = path.resolve(process.env.OUTPUT || './output');
+		const output = fs.createWriteStream(LOG_FILE, { flags: "a" });
+		const root = getOutputDir();
 
 		output.write(`\n========== ${path.basename(root)} ==========\n`);
 
-		function writeTree(dir, prefix = '') {
+		function writeTree(dir, prefix = "") {
 			let entries;
 
 			try {
@@ -695,15 +693,15 @@ app.get('/listDir', async (req, res) => {
 
 			entries.forEach((entry, index) => {
 				const isLast = index === entries.length - 1;
-				const marker = isLast ? '└── ' : '├── ';
+				const marker = isLast ? "└── " : "├── ";
 				const isDir = entry.isDirectory();
 
-				output.write(`${prefix}${marker}${entry.name}${isDir ? '/' : ''}\n`);
+				output.write(`${prefix}${marker}${entry.name}${isDir ? "/" : ""}\n`);
 
 				if (isDir) {
 					writeTree(
 						path.join(dir, entry.name),
-						prefix + (isLast ? '    ' : '│   ')
+						prefix + (isLast ? "    " : "│   ")
 					);
 				}
 			});
@@ -715,21 +713,19 @@ app.get('/listDir', async (req, res) => {
 			output.write(`Error: ${err.message}\n`);
 		}
 
-		output.write('====================\n');
+		output.write("====================\n");
 		output.end();
 
-		res.json({ success: 'done' });
+		res.json({ success: "done" });
 	} catch {
-
 		res.status(500).json({ error: "Failed to fetch storage info! Please try again.." });
 	}
-})
+});
 
 app.listen(port, () => {
-
 	execFileSync("bash", ["-c", `
-    find ./src -type f -name "*.sh" -exec sed -i 's/\\r$//' {} +
-`], {
+		find ./src -type f -name "*.sh" -exec sed -i 's/\\r$//' {} + -exec chmod +x {} +
+	`], {
 		stdio: "inherit",
 		cwd: process.cwd()
 	});
