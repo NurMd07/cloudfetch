@@ -9,11 +9,13 @@ const deleteOne = document.querySelector('.deleteone');
 const deleteAll = document.querySelector('.deleteall');
 
 const sidebarHeaderMenu = document.querySelector('.side-check');
+const sidebarHeaderMenuButton = sidebarHeaderMenu.closest('.sidebar-header-menu');
 const itemList = document.querySelector('.sidebar-list');
 const clearData = document.querySelector('.cleardata');
 const moveData = document.querySelector('.movedata');
 const clearLog = document.querySelector('.clearlog');
 const logContent = document.querySelector('.log-content');
+const logEmpty = document.querySelector('.log-empty');
 const sidebar = document.querySelector('.sidebar');
 const mainContent = document.querySelector('.main');
 const moreOptions = document.querySelector('.more-options');
@@ -33,13 +35,93 @@ const modeMagnet = document.querySelector('.mode-magnet');
 const headingGdriveSvg = document.querySelector('h1 svg');
 const headingMagnetSvg = document.querySelector('h1 svg:nth-child(2)');
 const headingSiteDLSvg = document.querySelector('h1 svg:nth-child(3)');
+const pageHeading = document.querySelector('main h1');
 const infoButton = document.querySelector('.info');
 const infoContentContainer = document.querySelector('.infoContent-container');
 const infoContent = document.querySelector('.infoContent');
 const closeInfoContent = document.querySelector('.closeInfoContent');
 const logout = document.querySelector('.logout');
+const confirmationOverlay = document.querySelector('.confirmation-overlay');
+const confirmationTitle = document.querySelector('#confirmation-title');
+const confirmationMessage = document.querySelector('#confirmation-message');
+const confirmationCancel = document.querySelector('.confirmation-cancel');
+const confirmationAccept = document.querySelector('.confirmation-accept');
+
+sidebarHeaderMenu.checked = localStorage.getItem('cloudfetch-active-view') === 'options';
+
+function requestConfirmation({ title, message, confirmLabel, danger = false }) {
+	const previousFocus = document.activeElement;
+	confirmationTitle.textContent = title;
+	confirmationMessage.textContent = message;
+	confirmationAccept.textContent = confirmLabel;
+	confirmationAccept.classList.toggle('danger', danger);
+	confirmationOverlay.classList.remove('hidden');
+	confirmationCancel.focus();
+
+	return new Promise(resolve => {
+		function close(confirmed) {
+			confirmationOverlay.classList.add('hidden');
+			confirmationOverlay.removeEventListener('click', onOverlayClick);
+			confirmationCancel.removeEventListener('click', onCancel);
+			confirmationAccept.removeEventListener('click', onAccept);
+			document.removeEventListener('keydown', onKeydown);
+			previousFocus.focus();
+			resolve(confirmed);
+		}
+
+		function onOverlayClick(event) {
+			if (event.target === confirmationOverlay) {
+				close(false);
+			}
+		}
+
+		function onCancel() {
+			close(false);
+		}
+
+		function onAccept() {
+			close(true);
+		}
+
+		function onKeydown(event) {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				close(false);
+			} else if (event.key === 'Tab') {
+				const focusedCancel = document.activeElement === confirmationCancel;
+				const focusedAccept = document.activeElement === confirmationAccept;
+
+				if (event.shiftKey && focusedCancel) {
+					event.preventDefault();
+					confirmationAccept.focus();
+				} else if (!event.shiftKey && focusedAccept) {
+					event.preventDefault();
+					confirmationCancel.focus();
+				}
+			}
+		}
+
+		confirmationOverlay.addEventListener('click', onOverlayClick);
+		confirmationCancel.addEventListener('click', onCancel);
+		confirmationAccept.addEventListener('click', onAccept);
+		document.addEventListener('keydown', onKeydown);
+	});
+}
+
+pageHeading.addEventListener('click', () => {
+	pageHeading.classList.add('clicked');
+	window.setTimeout(() => window.location.reload(), 160);
+});
 
 logout.addEventListener('click', async () => {
+	if (!await requestConfirmation({
+		title: 'Log out?',
+		message: 'Are you sure you want to log out?',
+		confirmLabel: 'Log out'
+	})) {
+		return;
+	}
+
 	const res = await fetch("/logout", {
 		method: "POST"
 	});
@@ -177,12 +259,13 @@ listOutput.addEventListener('click', async function () {
 	}).then(response => response.json())
 		.then(data => {
 			if (data.error) {
-				statusElement.innerHTML = data.error;
+				statusElement.textContent = data.error;
 				sidebarHeaderMenu.click();
 			} else {
 				if (window.innerWidth < 768) {
 					logContainer.classList.toggle('show');
 					optionsContainer.classList.toggle('hide');
+					logSwitcher.classList.toggle('active', logContainer.classList.contains('show'));
 				}
 
 			}
@@ -200,12 +283,38 @@ logSwitcher.addEventListener('click', function () {
 	logContainer.classList.toggle('show');
 
 	optionsContainer.classList.toggle('hide');
+	logSwitcher.classList.toggle('active', logContainer.classList.contains('show'));
 
+});
+
+sidebarHeaderMenu.addEventListener('change', function () {
+	localStorage.setItem('cloudfetch-active-view', sidebarHeaderMenu.checked ? 'options' : 'main');
+
+	if (window.innerWidth < 768) {
+		logContainer.classList.remove('show');
+		optionsContainer.classList.remove('hide');
+		logSwitcher.classList.remove('active');
+	}
+});
+
+sidebarHeaderMenu.addEventListener('click', function (event) {
+	if (event.isTrusted) {
+		sidebarHeaderMenuButton.classList.remove('download-attention');
+	}
 });
 
 
 
-removeRecent.addEventListener('click', function () {
+removeRecent.addEventListener('click', async function () {
+	if (!await requestConfirmation({
+		title: 'Remove recent item?',
+		message: 'The most recent item will be deleted from the output directory and its source file. If it was moved, its matching copy under /media/* will also be deleted. It will also be removed from download history.',
+		confirmLabel: 'Remove item',
+		danger: true
+	})) {
+		return;
+	}
+
 	fetch('/removeRecent', {
 		method: 'GET',
 		headers: {
@@ -214,7 +323,7 @@ removeRecent.addEventListener('click', function () {
 	}).then(response => response.json())
 		.then(data => {
 			if (data.error) {
-				statusElement.innerHTML = data.error;
+				statusElement.textContent = data.error;
 			} else {
 				statusElement.innerHTML = ' ✓&nbsp;&nbsp;Recent item removed successfully';
 			}
@@ -290,49 +399,78 @@ sidebar.addEventListener('touchend', (e) => {
 let clearState = false;
 
 function updateItemList(items) {
+	if (items.length === 0) {
+		const emptyState = document.createElement('li');
+		emptyState.classList.add('history-empty');
+		emptyState.textContent = 'No download history yet';
+		itemList.appendChild(emptyState);
+		return;
+	}
 
-	items = items.sort((a, b) => b.id - a.id);
-	items.forEach(item => {
-
+	[...items].sort((a, b) => b.id - a.id).forEach(item => {
 		const li = document.createElement('li');
 		li.classList.add('item');
+		const itemId = document.createElement('span');
+		itemId.classList.add('item-id');
+		itemId.textContent = item.id;
+		li.appendChild(itemId);
 
-		li.innerHTML = `
-      <span class="item-id">${item.id}</span>
-        <span class="item-name">📛 Name: <span id="nameDisplay"> ${item.name}</span></span>
-         <span class="item-category">🎬 Category: <span id="categoryDisplay"> ${item.category}</span></span>
-         <span class="item-timestamp">⌚ Added on: <span id="timestampDisplay"> ${new Date(item.timestamp).toLocaleString("en-US", {
+		const timestamp = new Date(item.timestamp).toLocaleString("en-US", {
 			day: "2-digit",
 			month: "short",
 			hour: "numeric",
 			minute: "2-digit",
 			hour12: true
-		})}</span></span>
-         <span class="item-status">📥 Status: <span id="statusDisplay"> ${item.status.toUpperCase()}</span></span>
-         <span class="item-url">🔗 URL: <span id="urlDisplay"> ${item.url}</span></span>
-         <span class="item-output-path">📂 Output Path: <span id="outputPathDisplay"> ${'~/output/' + (item.output_path ? item.output_path.split('/output/')[1] : '')}</span></span>
-         <span class="item-source-path">🗂️ Source Path: <span id="sourcePathDisplay"> ${'~/output/' + (item.source_path ? item.source_path.split('/output/')[1] : '')}</span></span>
- 
+		});
+		const outputPath = item.output_path
+			? `~/output/${item.output_path.split('/output/')[1] ?? item.output_path}`
+			: '~/output/';
+		const sourcePath = item.source_path
+			? `~/output/${item.source_path.split('/output/')[1] ?? item.source_path}`
+			: '~/output/';
 
-	`;
-
+		appendItemField(li, 'item-name', '📛 Name:', item.name);
+		appendItemField(li, 'item-category', '🎬 Category:', item.category);
+		appendItemField(li, 'item-timestamp', '⌚ Added on:', timestamp);
+		appendItemField(li, 'item-status', '📥 Status:', String(item.status ?? '').toUpperCase());
+		appendItemField(li, 'item-url', '🔗 URL:', item.url);
+		appendItemField(li, 'item-output-path', '📂 Output Path:', outputPath);
+		appendItemField(li, 'item-source-path', '🗂️ Source Path:', sourcePath);
 
 		itemList.appendChild(li);
 	});
 }
 
+function appendItemField(itemElement, fieldClass, label, value) {
+	const field = document.createElement('span');
+	field.classList.add(fieldClass);
+	field.append(document.createTextNode(`${label} `));
+
+	const fieldValue = document.createElement('span');
+	fieldValue.classList.add('item-field-value');
+	fieldValue.textContent = value ?? '';
+	field.appendChild(fieldValue);
+	itemElement.appendChild(field);
+}
+
 function fetchItems() {
-	itemList.innerHTML = ''; // Clear the existing list before fetching new items
 	fetch('/items', {
 		method: 'GET',
 		headers: {
 			'Content-Type': 'application/json'
 		}
 	})
-		.then(response => response.json())
+		.then(response => {
+			if (!response.ok) {
+				throw new Error(`Failed to fetch items (${response.status})`);
+			}
+			return response.json();
+		})
 		.then(data => {
-
-			// Update the UI with the fetched items
+			if (!Array.isArray(data)) {
+				throw new TypeError('Expected item list response to be an array');
+			}
+			itemList.replaceChildren();
 			updateItemList(data);
 
 		}).catch(error => {
@@ -351,9 +489,17 @@ function fetchStorageInfo() {
 			'Content-Type': 'application/json'
 		}
 	})
-		.then(response => response.json())
+		.then(response => {
+			if (!response.ok) {
+				throw new Error(`Failed to fetch storage info (${response.status})`);
+			}
+			return response.json();
+		})
 		.then(data => {
-			storageInfoContainer.innerHTML = ''; // Clear the existing storage info before fetching new data
+			if (!Array.isArray(data)) {
+				throw new TypeError('Expected storage info response to be an array');
+			}
+			storageInfoContainer.replaceChildren();
 			data.forEach(disk => {
 
 
@@ -363,16 +509,23 @@ function fetchStorageInfo() {
 				const storageName = document.createElement('span');
 				storageName.classList.add('storage-name');
 
-				storageName.textContent = disk.mount.split('/').pop() === "" ? "Root" : disk.mount.split('/').pop();
+				const mountName = disk.mount.split('/').pop();
+				storageName.textContent = mountName || "Root";
 
 				storage.appendChild(storageName);
 
 				const storagePath = document.createElement('span');
 				storagePath.classList.add('storage-path');
-				storagePath.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-hdd-fill" viewBox="0 0 16 16">
-  <path d="M0 10a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2.5 1a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2 0a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1M.91 7.204A3 3 0 0 1 2 7h12c.384 0 .752.072 1.09.204l-1.867-3.422A1.5 1.5 0 0 0 11.906 3H4.094a1.5 1.5 0 0 0-1.317.782z"/>
-</svg> ${disk.mount}`;
-				// storagePath.textContent = disk.mount;
+				const storageIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+				storageIcon.setAttribute('viewBox', '0 0 16 16');
+				storageIcon.setAttribute('width', '16');
+				storageIcon.setAttribute('height', '16');
+				storageIcon.setAttribute('fill', 'currentColor');
+				storageIcon.setAttribute('aria-hidden', 'true');
+				const storageIconPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+				storageIconPath.setAttribute('d', 'M0 10a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2.5 1a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2 0a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1M.91 7.204A3 3 0 0 1 2 7h12c.384 0 .752.072 1.09.204l-1.867-3.422A1.5 1.5 0 0 0 11.906 3H4.094a1.5 1.5 0 0 0-1.317.782z');
+				storageIcon.appendChild(storageIconPath);
+				storagePath.append(storageIcon, document.createTextNode(` ${disk.mount}`));
 
 				storage.appendChild(storagePath);
 
@@ -407,22 +560,29 @@ function fetchStorageInfo() {
 fetchItems();
 fetchStorageInfo();
 
-window.setInterval(fetchItems, 15000); // Fetch items every 5 seconds
+window.setInterval(fetchItems, 15000);
 window.setInterval(fetchStorageInfo, 30000); // Fetch storage info every 30 seconds	
 
 function waitForItemClick() {
 	return new Promise((resolve) => {
-		function handleClick(e) {
+		function finish(value) {
+			window.removeEventListener("click", handleClick);
+			resolve(value);
+		}
 
-			const item = e.target.closest(".item");
+		function handleClick(e) {
+			const target = e.target instanceof Element ? e.target : null;
 
 			if (!clearState) {
-				resolve(null);
+				finish(null);
 				return;
-			} else if (!item) {
+			}
 
-				if (e.target.classList.contains("side-check")) {
-					resolve(null);
+			const item = target?.closest(".item");
+			if (!item) {
+
+				if (target?.classList.contains("side-check")) {
+					finish(null);
 					return;
 				}
 
@@ -432,11 +592,7 @@ function waitForItemClick() {
 
 			}
 
-			const value = item.querySelector("span").textContent.trim();
-
-			window.removeEventListener("click", handleClick);
-
-			resolve(value);
+			finish(item.querySelector(".item-id").textContent.trim());
 		}
 
 		window.addEventListener("click", handleClick);
@@ -484,14 +640,14 @@ deleteOne.addEventListener('click', async function () {
 		headers: {
 			'Content-Type': 'application/json'
 		},
-		body: JSON.stringify({ id: parseInt(value) })
+		body: JSON.stringify({ id: parseInt(value, 10) })
 	})
 		.then(response => response.json())
 
 		.then(data => {
 			fetchItems();
 			if (data.error) {
-				statusElement.innerHTML = data.error;
+				statusElement.textContent = data.error;
 			} else {
 				statusElement.innerHTML = ' ✓&nbsp;&nbsp;File deleted successfully';
 				sidebarHeaderMenu.click();
@@ -503,7 +659,7 @@ deleteOne.addEventListener('click', async function () {
 
 });
 
-deleteAll.addEventListener('click', function (e) {
+deleteAll.addEventListener('click', function () {
 
 	fetch('/deleteAll', {
 		method: 'GET',
@@ -514,7 +670,7 @@ deleteAll.addEventListener('click', function (e) {
 		.then(response => response.json())
 		.then(data => {
 			if (data.error) {
-				statusElement.innerHTML = data.error;
+				statusElement.textContent = data.error;
 			} else {
 				statusElement.innerHTML = ' ✓&nbsp;&nbsp;All files deleted successfully';
 			}
@@ -528,7 +684,16 @@ deleteAll.addEventListener('click', function (e) {
 });
 
 
-clearData.addEventListener('click', function () {
+clearData.addEventListener('click', async function () {
+	if (!await requestConfirmation({
+		title: 'Delete app data?',
+		message: 'This will permanently delete files in the output directory and clear download history. This cannot be undone.',
+		confirmLabel: 'Delete data',
+		danger: true
+	})) {
+		return;
+	}
+
 	fetch('/clearData', {
 		method: 'GET',
 		headers: {
@@ -538,7 +703,8 @@ clearData.addEventListener('click', function () {
 		.then(response => response.json())
 		.then(data => {
 			if (data.error) {
-				statusElement.innerHTML = data.error;
+				statusElement.textContent = data.error;
+				return;
 			}
 			statusElement.innerHTML = ' ✓&nbsp;&nbsp;All data cleared successfully!&nbsp; ~/output';
 			fetchItems();
@@ -559,9 +725,10 @@ moveData.addEventListener('click', function () {
 		.then(response => response.json())
 		.then(data => {
 			if (data.error) {
-				statusElement.innerHTML = data.error;
+				statusElement.textContent = data.error;
+				return;
 			}
-			statusElement.innerHTML = ' ✓&nbsp;&nbsp;All data moved successfully&nbsp; ( to /media )';
+			statusElement.textContent = data.message;
 			fetchItems();
 		}).catch(error => {
 			statusElement.innerHTML = 'An error occurred. Please try again.';
@@ -581,18 +748,17 @@ clearLog.addEventListener('click', function () {
 		.then(response => response.json())
 		.then(data => {
 			if (data.error) {
-				statusElement.innerHTML = data.error;
-				sidebarHeaderMenu.click();
+				statusElement.textContent = data.error;
+				return;
 			}
-			logContent.innerHTML = "";
+			logContent.replaceChildren(logEmpty);
 			statusElement.innerHTML = ' ✓&nbsp;&nbsp;Log cleared successfully';
-			sidebarHeaderMenu.click();
 		}).catch(error => {
 			statusElement.innerHTML = 'An error occurred. Please try again.';
-			sidebarHeaderMenu.click();
 
 		})
 
+	sidebarHeaderMenu.click();
 });
 
 
@@ -726,7 +892,7 @@ downloadButton.addEventListener('click', function () {
 		.then(response => response.json())
 		.then(data => {
 			if (data.error) {
-				statusElement.innerHTML = data.error;
+				statusElement.textContent = data.error;
 				urlInput.className = 'urlInput-error';
 				nameInput.className = 'nameInput-error';
 				loader.classList.add('hidden');
@@ -736,6 +902,7 @@ downloadButton.addEventListener('click', function () {
 				}
 			} else {
 				statusElement.innerHTML = ' ✓&nbsp;&nbsp;Download started';
+				sidebarHeaderMenuButton.classList.add('download-attention');
 				loader.classList.add('hidden');
 			}
 			fetchItems()
@@ -755,10 +922,24 @@ downloadButton.addEventListener('click', function () {
 });
 
 const eventSource = new EventSource(`/stream-logs`);
+let logUpdateTimeout;
+let sidebarHeaderMenuLogTimeout;
 
 eventSource.onmessage = (event) => {
 
 	const data = JSON.parse(event.data);
+	if (!data.historical) {
+		sidebarHeaderMenuButton.classList.add('log-active');
+		window.clearTimeout(sidebarHeaderMenuLogTimeout);
+		sidebarHeaderMenuLogTimeout = window.setTimeout(() => {
+			sidebarHeaderMenuButton.classList.remove('log-active');
+		}, 1000);
+		logSwitcher.classList.add('updating');
+		window.clearTimeout(logUpdateTimeout);
+		logUpdateTimeout = window.setTimeout(() => {
+			logSwitcher.classList.remove('updating');
+		}, 1000);
+	}
 
 
 	const timestamp = `[${new Date().toLocaleString("en-GB", {
@@ -770,7 +951,16 @@ eventSource.onmessage = (event) => {
 	}).replace(",", "")}]`;
 	;
 
-	logContent.innerHTML += `<div class="log-line"><span class="log-timestamp">${timestamp}</span><span> ${data.message}</span></div>\n`;
+	logEmpty.remove();
+	const logLine = document.createElement('div');
+	logLine.classList.add('log-line');
+	const logTimestamp = document.createElement('span');
+	logTimestamp.classList.add('log-timestamp');
+	logTimestamp.textContent = timestamp;
+	const logMessage = document.createElement('span');
+	logMessage.textContent = ` ${data.message}`;
+	logLine.append(logTimestamp, logMessage);
+	logContent.appendChild(logLine);
 
 	logContent.scrollTop = logContent.scrollHeight;
 };
@@ -779,7 +969,3 @@ eventSource.onerror = (err) => {
 	console.error("SSE failed:", err);
 	eventSource.close();
 };
-
-
-
-

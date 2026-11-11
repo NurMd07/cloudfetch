@@ -192,7 +192,7 @@
     <div id="status" role="status" aria-live="polite"></div>
   </main>
   <div class="options">
-      <button class="logout"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M5 22C4.44772 22 4 21.5523 4 21V3C4 2.44772 4.44772 2 5 2H19C19.5523 2 20 2.44772 20 3V6H18V4H6V20H18V18H20V21C20 21.5523 19.5523 22 19 22H5ZM18 16V13H11V11H18V8L23 12L18 16Z"></path></svg>
+      <button class="logout" type="button" aria-label="Log out"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M5 22C4.44772 22 4 21.5523 4 21V3C4 2.44772 4.44772 2 5 2H19C19.5523 2 20 2.44772 20 3V6H18V4H6V20H18V18H20V21C20 21.5523 19.5523 22 19 22H5ZM18 16V13H11V11H18V8L23 12L18 16Z"></path></svg>
   </button>
     <div class="modes">
       <div class="mode-gdrive selected-mode">
@@ -316,6 +316,7 @@
     <div class="options-log">
       <span class="log-header">Log</span>
       <div class="log-content">
+        <div class="log-empty">No logs</div>
       </div>
     </div>
 
@@ -323,8 +324,8 @@
   <div class="sidebar">
     <div class="sidebar-header">
       <h2>Download History</h2>
-      <span class="sidebar-header-menu"><input class="side-check" type="checkbox" />
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+      <span class="sidebar-header-menu"><input class="side-check" type="checkbox" aria-label="Toggle options panel" />
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
           class="bi bi-menu-button menu" viewBox="0 0 16 16">
           <path
             d="M0 1.5A1.5 1.5 0 0 1 1.5 0h8A1.5 1.5 0 0 1 11 1.5v2A1.5 1.5 0 0 1 9.5 5h-8A1.5 1.5 0 0 1 0 3.5zM1.5 1a.5.5 0 0 0-.5.5v2a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-.5-.5z" />
@@ -339,6 +340,18 @@
       </span>
     </div>
     <ul class="sidebar-list"></ul>
+  </div>
+  <div class="confirmation-overlay hidden" role="presentation">
+    <section class="confirmation-dialog" role="alertdialog" aria-modal="true"
+      aria-labelledby="confirmation-title" aria-describedby="confirmation-message">
+      <span class="confirmation-eyebrow">Please confirm</span>
+      <h2 id="confirmation-title"></h2>
+      <p id="confirmation-message"></p>
+      <div class="confirmation-actions">
+        <button class="confirmation-cancel" type="button">Cancel</button>
+        <button class="confirmation-accept" type="button">Confirm</button>
+      </div>
+    </section>
   </div>
   <script src="/js/main.js"></script>
 </body>

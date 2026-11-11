@@ -9,7 +9,7 @@
 </head>
 
 <body>
-    <div class="brand"><img src="icons/icon-64.png" /><span class="brand-heading">CloudFetch</span></div>
+    <div class="brand"><img src="icons/icon-64.png" alt="" /><span class="brand-heading">CloudFetch</span></div>
     <main class="main">
         <h1><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
                 class="bi bi-unlock2-fill" viewBox="0 0 16 16">
@@ -23,16 +23,18 @@
             <form action="/login" method="POST">
                 <label for="username">Username</label>
                 <div class="input-container">
-                    <input type="text" name="username" placeholder="Enter your username" required>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="currentColor"
+                    <input id="username" type="text" name="username" placeholder="Enter your username"
+                        autocomplete="username" required>
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="currentColor"
                         class="bi bi-person-fill" viewBox="0 0 16 16">
                         <path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6" />
                     </svg>
                 </div>
                 <label for="password">Password</label>
                 <div class="input-container">
-                    <input type="password" name="password" placeholder="Enter your password" required>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    <input id="password" type="password" name="password" placeholder="Enter your password"
+                        autocomplete="current-password" required>
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
                         class="bi bi-lock-fill" viewBox="0 0 16 16">
                         <path fill-rule="evenodd"
                             d="M8 0a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 2 13.5v-5a2.5 2.5 0 0 1 2-2.45V4a4 4 0 0 1 4-4m0 1a3 3 0 0 0-3 3v2h6V4a3 3 0 0 0-3-3" />
@@ -42,19 +44,19 @@
             </form>
         </div>
 
-        <div class="message">
+        <div class="message" aria-live="polite">
             <% if (typeof error !=='undefined' && error) { %>
                 <%- error %>
                     <% } %>
         </div>
-        <div class="help">
+        <button class="help" type="button" aria-label="Show environment variable setup help">
 
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
                 class="bi bi-x-diamond-fill" viewBox="0 0 16 16">
                 <path
                     d="M9.05.435c-.58-.58-1.52-.58-2.1 0L4.047 3.339 8 7.293l3.954-3.954L9.049.435zm3.61 3.611L8.708 8l3.954 3.954 2.904-2.905c.58-.58.58-1.519 0-2.098l-2.904-2.905zm-.706 8.614L8 8.708l-3.954 3.954 2.905 2.904c.58.58 1.519.58 2.098 0l2.905-2.904zm-8.614-.706L7.292 8 3.339 4.046.435 6.951c-.58.58-.58 1.519 0 2.098z" />
             </svg>
-        </div>
+        </button>
     </main>
     <script src="/js/login.js"></script>
 </body>

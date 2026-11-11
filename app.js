@@ -146,9 +146,9 @@ app.get("/login", async (req, res) => {
 });
 
 app.post("/login", async (req, res) => {
-	const username = normalizeText(req.body.username);
+	const username = normalizeText(req.body.username).toLowerCase();;
 	const password = normalizeText(req.body.password);
-	const envUser = normalizeText(process.env.USERNAME);
+	const envUser = normalizeText(process.env.USERNAME).toLowerCase();;
 	const envPass = normalizeText(process.env.PASSWORD);
 
 	if (!envUser || !envPass) {
@@ -437,11 +437,11 @@ app.get("/stream-logs", (req, res) => {
 			"Connection": "keep-alive"
 		});
 
-		const sendLog = (data) => {
+		const sendLog = (data, historical = false) => {
 			try {
 				const message = data.trim();
 				if (message && !res.writableEnded) {
-					res.write(`data: ${JSON.stringify({ message })}\n\n`);
+					res.write(`data: ${JSON.stringify({ message, historical })}\n\n`);
 				}
 			} catch (err) {
 				console.error("SSE write error:", err);
@@ -468,7 +468,7 @@ app.get("/stream-logs", (req, res) => {
 			stream.on("data", (chunk) => {
 				const lines = (leftover + chunk.toString()).split("\n");
 				leftover = lines.pop() || "";
-				lines.forEach(sendLog);
+				lines.forEach((line) => sendLog(line));
 			});
 
 			stream.on("end", () => {
@@ -499,7 +499,7 @@ app.get("/stream-logs", (req, res) => {
 						if (res.writableEnded || index >= recentLines.length) return;
 
 						const batch = recentLines.slice(index, index + batchSize);
-						batch.forEach(sendLog);
+						batch.forEach((line) => sendLog(line, true));
 						index += batchSize;
 
 						setTimeout(sendBatch, 15);

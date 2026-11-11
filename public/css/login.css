@@ -229,18 +229,52 @@
       transform: translateY(1px);
   }
 
-  .help svg {
+  .help {
       position: absolute;
-      right: 1.3em;
-      bottom: 1.3em;
+      right: 0.6em;
+      bottom: 0.6em;
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+  }
+
+  .help svg {
+      position: static;
       width: 0.9em;
       height: 0.9em;
       animation: scale-rotate 5s infinite;
   }
 
+  .help {
+      cursor: pointer;
+  }
+
+  .help:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.8);
+      outline-offset: 4px;
+      border-radius: 4px;
+  }
+
+  .env-variable {
+      color: #fbff00;
+  }
+
   @keyframes scale-rotate {
       0% {
           transform: scale(1) rotate(0deg);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+          .help svg {
+              animation: none;
+          }
       }
 
       50% {
@@ -295,11 +329,9 @@
           font-size: 1.3rem;
       }
 
-      .help svg {
-          position: absolute;
-          right: 1em;
-          bottom: 1.3em;
-
+      .help {
+          right: 0.3em;
+          bottom: 0.3em;
       }
 
       body {
