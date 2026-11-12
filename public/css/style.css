@@ -543,14 +543,12 @@
 
       }
 
-      .sidebar-header-menu.download-attention,
       .sidebar-header-menu.log-active {
         isolation: isolate;
         background: linear-gradient(135deg, #14532d, #166534 55%, #15803d);
         box-shadow: 0 0 12px rgba(34, 197, 94, 0.28);
       }
 
-      .sidebar-header-menu.download-attention::before,
       .sidebar-header-menu.log-active::before {
         content: "";
         position: absolute;
@@ -577,7 +575,6 @@
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .sidebar-header-menu.download-attention::before,
         .sidebar-header-menu.log-active::before {
           animation: none;
         }

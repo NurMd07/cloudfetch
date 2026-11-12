@@ -297,14 +297,6 @@ sidebarHeaderMenu.addEventListener('change', function () {
 	}
 });
 
-sidebarHeaderMenu.addEventListener('click', function (event) {
-	if (event.isTrusted) {
-		sidebarHeaderMenuButton.classList.remove('download-attention');
-	}
-});
-
-
-
 removeRecent.addEventListener('click', async function () {
 	if (!await requestConfirmation({
 		title: 'Remove recent item?',
@@ -902,7 +894,6 @@ downloadButton.addEventListener('click', function () {
 				}
 			} else {
 				statusElement.innerHTML = ' ✓&nbsp;&nbsp;Download started';
-				sidebarHeaderMenuButton.classList.add('download-attention');
 				loader.classList.add('hidden');
 			}
 			fetchItems()
@@ -922,23 +913,24 @@ downloadButton.addEventListener('click', function () {
 });
 
 const eventSource = new EventSource(`/stream-logs`);
-let logUpdateTimeout;
-let sidebarHeaderMenuLogTimeout;
+const LOG_ACTIVITY_TIMEOUT_MS = 10000;
+let logActivityTimeout;
+
+function showLogActivity() {
+	sidebarHeaderMenuButton.classList.add('log-active');
+	logSwitcher.classList.add('updating');
+	window.clearTimeout(logActivityTimeout);
+	logActivityTimeout = window.setTimeout(() => {
+		sidebarHeaderMenuButton.classList.remove('log-active');
+		logSwitcher.classList.remove('updating');
+	}, LOG_ACTIVITY_TIMEOUT_MS);
+}
 
 eventSource.onmessage = (event) => {
 
 	const data = JSON.parse(event.data);
 	if (!data.historical) {
-		sidebarHeaderMenuButton.classList.add('log-active');
-		window.clearTimeout(sidebarHeaderMenuLogTimeout);
-		sidebarHeaderMenuLogTimeout = window.setTimeout(() => {
-			sidebarHeaderMenuButton.classList.remove('log-active');
-		}, 1000);
-		logSwitcher.classList.add('updating');
-		window.clearTimeout(logUpdateTimeout);
-		logUpdateTimeout = window.setTimeout(() => {
-			logSwitcher.classList.remove('updating');
-		}, 1000);
+		showLogActivity();
 	}
 
 
@@ -967,5 +959,8 @@ eventSource.onmessage = (event) => {
 
 eventSource.onerror = (err) => {
 	console.error("SSE failed:", err);
+	window.clearTimeout(logActivityTimeout);
+	sidebarHeaderMenuButton.classList.remove('log-active');
+	logSwitcher.classList.remove('updating');
 	eventSource.close();
 };
